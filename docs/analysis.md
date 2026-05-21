@@ -53,10 +53,25 @@ and calls out the aviation path explicitly where it differs.
 ### A.1 Garmin Varia (cycling rear radar)
 
 **Devices.** Varia RTL510, RTL511, RTL515, RTL516, the new RearVue 820,
-and the older RVR315. The 5xx series and newer use BLE plus ANT+. The 820
-is reported to have a different BLE behaviour on launch (see Garmin forum
-thread on RearVue 820 BLE pairing), so the parser should be defensive
-about firmware variance.
+RCT715 and RCT716 (radar + tail light + 1080p dashcam), and the older
+RVR315. The 5xx and 7xx series use BLE plus ANT+. The 820 is reported to
+have a different BLE behaviour on launch (see Garmin forum thread on
+RearVue 820 BLE pairing), so the parser should be defensive about
+firmware variance.
+
+**Target device for this project: Varia RCT716** (StVZO variant of RCT715,
+confirmed with the user). The RCT716 exposes the same radar BLE service
+as the RTL5xx line; the camera adds two extra capabilities that are not
+strictly v1 but worth noting:
+
+- *Video stream:* not over BLE. The device hosts a WiFi access point and
+  the Garmin Varia app pulls clips over WiFi when explicitly transferred.
+  Out of scope for v1.
+- *Camera control (start/stop recording, save incident clip):* exposed
+  over BLE to the Edge head unit and the Varia app. The command channel
+  has not been documented in the public reverse engineering work seen so
+  far. Reverse engineering this would be a Phase 2 stretch (a "save clip"
+  Action Button intent is a natural addition once we have it).
 
 **BLE service.** A single primary service exposes a single notify
 characteristic that streams radar threats once per second.
@@ -521,8 +536,8 @@ Notes:
 
 | # | Risk / question                                                   | Severity | Mitigation / next step                                                                 |
 |---|-------------------------------------------------------------------|----------|----------------------------------------------------------------------------------------|
-| 1 | We do not own the exact Varia device the user has.                | High     | User confirms model. We borrow or buy an RTL515 for development. Without a device we cannot finalise protocol details. |
-| 2 | "Garmin Vario" might really mean an aviation device (GDL 50 etc). | High     | Decide before Phase 2. If aviation, drop BLE plan and design around WiFi GDL 90 + FLARM/BLE-NMEA. |
+| 1 | Confirm the RCT716 advertises the same radar service UUID as the RTL5xx (very likely but not yet verified on hardware). | Low      | Sniff with nRF Connect on first contact; lock the UUID into a fixture. |
+| 2 | Resolved: target device is Garmin Varia RCT716 (cycling rear radar). | -        | -                                                                                              |
 | 3 | iOS Simulator has no BLE radio.                                   | Medium   | All BLE work tested on device. Unit tests run on captured byte fixtures.               |
 | 4 | Apple Developer paid account required for Live Activities, Push, App Groups, Critical Alerts, distribution. | Medium | Confirm an active Apple Developer Program membership. Free profile cannot ship LA push or AOD properly. |
 | 5 | Live Activity push budget may throttle 1 Hz updates.              | Medium   | Use local updates from the background BLE callback as the primary path. Push is a backup. Set `NSSupportsLiveActivitiesFrequentUpdates`. |
