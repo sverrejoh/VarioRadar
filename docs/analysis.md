@@ -559,11 +559,57 @@ macOS while the unit was docked over USB. Findings:
   2. The RCT7xx requires pairing/bonding for new centrals (the RTL5xx
      line did not, per community reports, but the camera models have a
      richer pairing flow in the Varia app).
-- **Next bench step.** Unplug the unit, power it on normally, re-run the
-  probe, and capture: full GATT table, the radar characteristic UUID
-  (confirm `6A4E3201-...` or whatever the real value is), notify frames
-  with no traffic, and notify frames while a person/car approaches.
-  Save raw hex dumps as fixtures under `Fixtures/`.
+- **Root cause of the disconnects (bluetoothd log analysis).** The kick
+  is macOS specific, not a device defect, and not USB or pairing mode
+  related (reproduced unplugged and in pairing mode):
+  1. On every LE connection, macOS bluetoothd does housekeeping: it reads
+     the GAP device name characteristic (0x2A00).
+  2. The RCT716 protects GAP reads: it answers
+     `LE_ATT_ERROR_INSUFFICIENT_AUTHENTICATION`.
+  3. bluetoothd auto-starts SMP pairing
+     (`GATT is Asking to pair ... startAutoPairing=1`).
+  4. The Garmin refuses standard SMP and terminates the link about 60 ms
+     into pairing (HCI reason 0x13, "Remote User Terminated", surfaced as
+     reason 719 / CBErrorDomain code 7).
+  This loop is unavoidable on macOS (a fast-subscribe race lost 210/210
+  attempts; characteristic discovery needs live ATT round trips and the
+  link dies first). iOS does not do the automatic GAP name read, which is
+  why third party iOS and Android apps (Ride with GPS, Cadence, pycycling
+  on Linux) work with the RCT715/716 without bonding.
+- **Full GATT table** (recovered from the bluetoothd cache dump):
+
+  | Handle | Service                                  | Note                       |
+  |--------|------------------------------------------|----------------------------|
+  | 0x0001 | 0x1800 GAP                               | name read is auth gated    |
+  | 0x0007 | 0x1801 GATT                              |                            |
+  | 0x000B | ABD23100-81B1-4429-BC15-EB4869827151     | Garmin proprietary         |
+  | 0x004A | ABD23150-...                             | Garmin proprietary         |
+  | 0x0050 | ABD23120-...                             | Garmin proprietary         |
+  | 0x0056 | ABD23130-...                             | Garmin proprietary         |
+  | 0x0094 | ABD23170-...                             | Garmin proprietary         |
+  | 0x00A4 | ABD23180-...                             | Garmin proprietary         |
+  | 0x00AB | ABD23190-...                             | Garmin proprietary         |
+  | 0x00B5 | ABD231A0-...                             | Garmin proprietary         |
+  | 0x00BB | 6A4E3200-667B-11E3-949A-0800200C9A66     | radar, ends 0x00C1         |
+  | 0x00C2 | 0x180A Device Information                |                            |
+  | 0x00D5 | 0x180F Battery                           |                            |
+
+  The ABD231xx block is presumably camera control, Garmin auth, and
+  firmware plumbing; the radar service spans 7 handles (room for two
+  characteristics plus descriptors).
+- **Radar characteristic confirmed via pycycling**: the measurement
+  characteristic is `6A4E3203-667B-11E3-949A-0800200C9A66` (notify).
+  Payload: byte 0 packet id, then per threat `[id, distance_m, speed_kmh]`
+  as uint8 triplets. pycycling lists RVR315, RTL515/516 and RCT715 as
+  compatible, which covers our RCT716.
+  (https://github.com/zacharyedwardbull/pycycling)
+- **Consequence for the project.** Live frame capture cannot happen from
+  macOS. First live validation happens on an iPhone: either nRF Connect
+  (manual, zero code) or the Phase 2 app skeleton deployed via Xcode.
+  Fixtures get captured on iPhone (nRF Connect export or a debug logging
+  screen in the app) instead of on the Mac. Bench probe sources from this
+  session are in `/tmp/blescan/` and can be promoted to `tools/` in
+  Phase 2 if useful.
 
 ## E. Risks and open questions
 
