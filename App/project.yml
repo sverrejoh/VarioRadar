@@ -51,6 +51,8 @@ targets:
         NSSupportsLiveActivitiesFrequentUpdates: true
         UIBackgroundModes:
           - bluetooth-central
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
 
   VarioRadarWidgets:
     type: app-extension

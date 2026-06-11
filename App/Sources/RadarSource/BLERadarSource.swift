@@ -26,6 +26,7 @@ final class BLERadarSource: NSObject, RadarSource {
     private var central: CBCentralManager?
     private var radar: CBPeripheral?
     private var isSubscribed = false
+    private let recorder = RawFrameRecorder()
 
     private let serviceUUID = CBUUID(string: VariaIdentifiers.service)
     private let measurementUUID = CBUUID(string: VariaIdentifiers.radarMeasurement)
@@ -187,8 +188,15 @@ extension BLERadarSource: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral,
                     didUpdateValueFor characteristic: CBCharacteristic,
                     error: Error?) {
-        guard let data = characteristic.value,
-              let frame = try? VariaRadarParser.parse(data) else { return }
-        onFrame?(frame.stamped(at: Date()))
+        guard let data = characteristic.value else { return }
+        do {
+            let frame = try VariaRadarParser.parse(data)
+            recorder.record(data)
+            onFrame?(frame.stamped(at: Date()))
+        } catch {
+            recorder.record(data, parseFailed: true)
+            let hex = data.map { String(format: "%02x", $0) }.joined()
+            trace("Parse FAILED (\(error)): \(hex)")
+        }
     }
 }
