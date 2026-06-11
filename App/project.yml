@@ -1,0 +1,74 @@
+name: VarioRadar
+options:
+  bundleIdPrefix: com.varioradar
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+
+packages:
+  VarioRadarCore:
+    path: ../Packages/VarioRadarCore
+
+settings:
+  base:
+    SDKROOT: iphoneos
+    SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Set your team in Xcode (Signing & Capabilities) before running on a
+    # device. Live Activities, App Groups, and background BLE need a paid
+    # Apple Developer account.
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  VarioRadar:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Shared
+    dependencies:
+      - package: VarioRadarCore
+      - target: VarioRadarWidgets
+    settings:
+      base:
+        SDKROOT: iphoneos
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        PRODUCT_BUNDLE_IDENTIFIER: com.varioradar.app
+        CODE_SIGN_ENTITLEMENTS: Sources/VarioRadar.entitlements
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: VarioRadar
+        UILaunchScreen: {}
+        NSBluetoothAlwaysUsageDescription: "VarioRadar connects to your Garmin Varia radar over Bluetooth to show approaching vehicles."
+        NSSupportsLiveActivities: true
+        NSSupportsLiveActivitiesFrequentUpdates: true
+        UIBackgroundModes:
+          - bluetooth-central
+
+  VarioRadarWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widgets/Sources
+      - path: Shared
+    dependencies:
+      - package: VarioRadarCore
+    settings:
+      base:
+        SDKROOT: iphoneos
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        PRODUCT_BUNDLE_IDENTIFIER: com.varioradar.app.widgets
+        CODE_SIGN_ENTITLEMENTS: Widgets/Sources/VarioRadarWidgets.entitlements
+    info:
+      path: Widgets/Sources/Info.plist
+      properties:
+        CFBundleDisplayName: VarioRadar Widgets
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
