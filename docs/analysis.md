@@ -611,6 +611,40 @@ macOS while the unit was docked over USB. Findings:
   session are in `/tmp/blescan/` and can be promoted to `tools/` in
   Phase 2 if useful.
 
+### D2.1 Correction (2026-06-11, later the same day): bonding is the gate, macOS works
+
+The conclusion above ("iOS works unbonded, macOS is a dead end") was
+**wrong**. On-device testing from a real iPhone showed the identical
+drop-during-discovery signature, which prompted a retest of the pairing
+path with simultaneous bluetoothd logging:
+
+- **The RCT716 (firmware 5.50) requires a standard BLE bond from every
+  central, on every platform.** Unbonded centrals are dropped about one
+  second after connect, during GATT discovery. This is a departure from
+  the RTL5xx behaviour the community documented (subscribe-without-bond),
+  presumably part of the camera model's privacy hardening.
+- **With the radar in pairing mode** (power off, hold button ~2 s, LED
+  flashes purple, 5-minute window) **standard "Just Works" SMP pairing
+  succeeds**: encryption enabled, keys persisted, and the radar streams.
+  Verified end to end on macOS; the log shows
+  `Pairing succeeded ... Writing keys to disk`.
+- After bonding, macOS receives live notifications on `6A4E3203`. The
+  Mac is therefore a fully usable dev client after a one-time pairing.
+- Full radar service layout from the bonded session:
+  `6A4E3203` (read + notify, the measurement stream; a direct read
+  returns a 20-byte zero buffer) and `6A4E3205` (read + write +
+  write-no-response; reads `0xff`; purpose unknown, likely a control
+  register, possibly threat-level/alert config or camera related).
+- Observed idle stream: single-byte frames (clear road) at roughly 7 Hz
+  with a cycling sequence nibble, not the 1 Hz the RTL5xx lore suggests.
+  Multi-target frame layout still needs live confirmation with real
+  traffic.
+- **App consequence:** first-time setup needs a pairing flow: radar in
+  pairing mode, connect, iOS shows the system pairing prompt, user
+  accepts, bond persists. The app should surface this in onboarding
+  ("put your radar in pairing mode"). After that, reconnects are
+  automatic and unattended.
+
 ## E. Risks and open questions
 
 | # | Risk / question                                                   | Severity | Mitigation / next step                                                                 |
