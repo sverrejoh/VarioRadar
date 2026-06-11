@@ -17,7 +17,7 @@ struct RadarStatusWidget: Widget {
         }
         .configurationDisplayName("Radar status")
         .description("The last vehicle your Varia radar reported.")
-        .supportedFamilies([.systemSmall, .accessoryRectangular, .accessoryCircular])
+        .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular, .accessoryCircular])
     }
 }
 
@@ -44,17 +44,47 @@ struct RadarStatusProvider: TimelineProvider {
 }
 
 struct RadarStatusEntryView: View {
+    @Environment(\.widgetFamily) private var family
     var entry: RadarStatusEntry
 
     var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: entry.presentation.highestLevel.symbolName)
-                .font(.title2)
-                .foregroundStyle(entry.presentation.highestLevel.color)
-            Text(entry.presentation.isClear ? "Clear" : entry.presentation.compactText)
-                .font(.headline)
-                .monospacedDigit()
-                .foregroundStyle(.white)
+        switch family {
+        case .systemMedium:
+            HStack(spacing: 16) {
+                icon.font(.system(size: 40))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(entry.presentation.isClear ? "Road clear" : "Vehicle behind")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    if !entry.presentation.isClear {
+                        Text(detailText)
+                            .font(.subheadline)
+                            .monospacedDigit()
+                            .foregroundStyle(.white.opacity(0.8))
+                    }
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 4)
+        default:
+            VStack(spacing: 6) {
+                icon.font(.title2)
+                Text(entry.presentation.isClear ? "Clear" : entry.presentation.compactText)
+                    .font(.headline)
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+            }
         }
+    }
+
+    private var icon: some View {
+        Image(systemName: entry.presentation.highestLevel.symbolName)
+            .foregroundStyle(entry.presentation.highestLevel.color)
+    }
+
+    private var detailText: String {
+        let distance = entry.presentation.nearestDistanceMeters.map { "\($0) m" } ?? ""
+        let speed = entry.presentation.nearestSpeedKmh.map { "\($0) km/h" } ?? ""
+        return [distance, speed].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }
