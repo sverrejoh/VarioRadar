@@ -108,11 +108,23 @@ struct ApproachTrackView: View {
                 } else {
                     ForEach(presentation.cars) { car in
                         let fraction = min(max(CGFloat(car.distanceMeters) / CGFloat(maxRange), 0), 1)
-                        Image(systemName: "car.side.fill")
-                            .font(.system(size: carSize, weight: .semibold))
-                            .foregroundStyle(car.level.color)
-                            .shadow(color: car.level.color.opacity(0.7), radius: 3)
-                            .position(x: bikeZone + carSize / 2 + fraction * trackWidth, y: midY)
+                        // Compact only labels the nearest car; more would
+                        // collide in the ~52 pt slot.
+                        let showMeters = style == .expanded || car.id == presentation.nearest?.id
+                        VStack(spacing: style == .compact ? -1 : 0) {
+                            Image(systemName: "car.side.fill")
+                                .font(.system(size: carSize, weight: .semibold))
+                                .foregroundStyle(car.level.color)
+                                .shadow(color: car.level.color.opacity(0.7), radius: 3)
+                            if showMeters {
+                                Text("\(car.distanceMeters)")
+                                    .font(.system(size: style == .compact ? 8 : 9, weight: .bold, design: .rounded))
+                                    .monospacedDigit()
+                                    .contentTransition(.numericText(countsDown: true))
+                                    .foregroundStyle(.white.opacity(0.9))
+                            }
+                        }
+                        .position(x: bikeZone + carSize / 2 + fraction * trackWidth, y: midY)
                     }
                 }
             }
