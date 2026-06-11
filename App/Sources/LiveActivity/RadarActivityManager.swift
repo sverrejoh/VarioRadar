@@ -1,5 +1,6 @@
 import ActivityKit
 import Foundation
+import OSLog
 
 /// Owns the lifecycle of the radar Live Activity: start on session begin,
 /// update on every frame, end on session stop.
@@ -12,18 +13,44 @@ import Foundation
 @MainActor
 final class RadarActivityManager {
     private var activity: Activity<RadarActivityAttributes>?
+    private var updateCount = 0
+    private let log = Logger(subsystem: "com.varioradar", category: "activity")
+
+    private func trace(_ message: String) {
+        log.info("\(message, privacy: .public)")
+        print("[activity] \(message)")
+    }
 
     var isActive: Bool { activity != nil }
 
     func start(sessionName: String = "Ride") {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled, activity == nil else { return }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            trace("Live Activities are disabled for this app")
+            return
+        }
+        guard activity == nil else { return }
+
+        // Live Activities outlive the app process. End any orphans from a
+        // previous run first, otherwise the system keeps showing a stale
+        // activity that no one is updating.
+        let orphans = Activity<RadarActivityAttributes>.activities
+        if !orphans.isEmpty {
+            trace("Ending \(orphans.count) orphaned activit\(orphans.count == 1 ? "y" : "ies")")
+            for orphan in orphans {
+                Task { await orphan.end(nil, dismissalPolicy: .immediate) }
+            }
+        }
+
         let attributes = RadarActivityAttributes(sessionName: sessionName)
         let state = RadarActivityAttributes.ContentState(presentation: .clear)
         let content = ActivityContent(state: state, staleDate: nil)
         do {
-            activity = try Activity.request(attributes: attributes, content: content)
+            let started = try Activity.request(attributes: attributes, content: content)
+            activity = started
+            updateCount = 0
+            trace("Started activity \(started.id)")
         } catch {
-            print("Live Activity start failed: \(error)")
+            trace("Activity request FAILED: \(error.localizedDescription)")
         }
     }
 
@@ -34,11 +61,16 @@ final class RadarActivityManager {
         // old reading.
         let state = RadarActivityAttributes.ContentState(presentation: presentation)
         let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(5))
+        updateCount += 1
+        if updateCount == 1 || updateCount % 30 == 0 {
+            trace("Update #\(self.updateCount): \(presentation.isClear ? "clear" : "\(presentation.threatCount) car(s), nearest \(presentation.nearestDistanceMeters ?? -1) m") -> \(activity.id)")
+        }
         Task { await activity.update(content) }
     }
 
     func end() {
         guard let activity else { return }
+        trace("Ending activity \(activity.id) after \(updateCount) updates")
         let current = activity.content
         Task { await activity.end(current, dismissalPolicy: .immediate) }
         self.activity = nil
