@@ -19,6 +19,14 @@ struct VarioRadarApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(store)
+                .onAppear {
+                    // Debug aid: auto-start a session when launched with
+                    // VR_AUTOSTART=1 (set via devicectl --console), so the
+                    // BLE lifecycle can be observed without tapping.
+                    if ProcessInfo.processInfo.environment["VR_AUTOSTART"] == "1" {
+                        store.start()
+                    }
+                }
         }
     }
 }

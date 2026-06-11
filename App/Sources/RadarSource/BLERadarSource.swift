@@ -32,6 +32,14 @@ final class BLERadarSource: NSObject, RadarSource {
     static let restoreIdentifier = "com.varioradar.central"
     private let log = Logger(subsystem: "com.varioradar", category: "ble")
 
+    /// Mirror lifecycle events to both the unified log and stdout. stdout
+    /// is what `devicectl ... --console` captures, so this makes a live
+    /// console session show the full connection trace.
+    private func trace(_ message: String) {
+        log.info("\(message, privacy: .public)")
+        print("[ble] \(message)")
+    }
+
     func start() {
         if let central {
             beginScan(with: central)
@@ -56,11 +64,11 @@ final class BLERadarSource: NSObject, RadarSource {
         guard central.state == .poweredOn else { return }
         let known = central.retrieveConnectedPeripherals(withServices: [serviceUUID])
         if let peripheral = known.first {
-            log.info("Reusing already-connected radar \(peripheral.identifier.uuidString, privacy: .public)")
+            trace("Reusing already-connected radar \(peripheral.identifier.uuidString)")
             connect(peripheral, with: central)
             return
         }
-        log.info("Scanning for radar service")
+        trace("Scanning for radar service")
         onStatus?(.scanning)
         central.scanForPeripherals(withServices: [serviceUUID])
     }
@@ -76,7 +84,7 @@ final class BLERadarSource: NSObject, RadarSource {
 
 extension BLERadarSource: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        log.info("Central state: \(central.state.rawValue)")
+        trace("Central state: \(central.state.rawValue)")
         switch central.state {
         case .poweredOn:
             beginScan(with: central)
@@ -94,7 +102,7 @@ extension BLERadarSource: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
         if let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral],
            let peripheral = peripherals.first {
-            log.info("Restoring radar \(peripheral.identifier.uuidString, privacy: .public)")
+            trace("Restoring radar \(peripheral.identifier.uuidString)")
             radar = peripheral
             peripheral.delegate = self
         }
@@ -104,7 +112,7 @@ extension BLERadarSource: CBCentralManagerDelegate {
                         didDiscover peripheral: CBPeripheral,
                         advertisementData: [String: Any],
                         rssi RSSI: NSNumber) {
-        log.info("Discovered \(peripheral.name ?? "?", privacy: .public) rssi \(RSSI.intValue)")
+        trace("Discovered \(peripheral.name ?? "?") rssi \(RSSI.intValue)")
         central.stopScan()
         connect(peripheral, with: central)
     }
@@ -112,7 +120,7 @@ extension BLERadarSource: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         // Link is up, but not yet streaming. Stay in `.connecting` until
         // the notify subscription succeeds.
-        log.info("Link connected, discovering services")
+        trace("Link connected, discovering services")
         peripheral.discoverServices([serviceUUID])
     }
 
@@ -120,7 +128,7 @@ extension BLERadarSource: CBCentralManagerDelegate {
                         didDisconnectPeripheral peripheral: CBPeripheral,
                         error: Error?) {
         let reason = error?.localizedDescription ?? "clean"
-        log.error("Disconnected (was subscribed: \(self.isSubscribed)): \(reason, privacy: .public)")
+        trace("Disconnected (was subscribed: \(self.isSubscribed)): \(reason)")
         isSubscribed = false
         onStatus?(.disconnected(reason: error?.localizedDescription))
         // iOS holds this pending and reconnects when the radar is available
@@ -131,16 +139,16 @@ extension BLERadarSource: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager,
                         didFailToConnect peripheral: CBPeripheral,
                         error: Error?) {
-        log.error("Failed to connect: \(error?.localizedDescription ?? "?", privacy: .public)")
+        trace("Failed to connect: \(error?.localizedDescription ?? "?")")
         beginScan(with: central)
     }
 }
 
 extension BLERadarSource: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        if let error { log.error("Service discovery error: \(error.localizedDescription, privacy: .public)") }
+        if let error { trace("Service discovery error: \(error.localizedDescription)") }
         guard let service = peripheral.services?.first(where: { $0.uuid == serviceUUID }) else {
-            log.error("Radar service not found on peripheral")
+            trace("Radar service not found on peripheral")
             return
         }
         peripheral.discoverCharacteristics([measurementUUID], for: service)
@@ -149,12 +157,12 @@ extension BLERadarSource: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral,
                     didDiscoverCharacteristicsFor service: CBService,
                     error: Error?) {
-        if let error { log.error("Characteristic discovery error: \(error.localizedDescription, privacy: .public)") }
+        if let error { trace("Characteristic discovery error: \(error.localizedDescription)") }
         guard let characteristic = service.characteristics?.first(where: { $0.uuid == measurementUUID }) else {
-            log.error("Measurement characteristic not found")
+            trace("Measurement characteristic not found")
             return
         }
-        log.info("Subscribing to measurement characteristic")
+        trace("Subscribing to measurement characteristic")
         peripheral.setNotifyValue(true, for: characteristic)
     }
 
@@ -165,13 +173,13 @@ extension BLERadarSource: CBPeripheralDelegate {
             // A failure here usually means the characteristic demands
             // pairing/encryption, the key clue distinguishing "needs
             // bonding" from "competing connection".
-            log.error("Subscribe FAILED: \(error.localizedDescription, privacy: .public)")
+            trace("Subscribe FAILED: \(error.localizedDescription)")
             onStatus?(.disconnected(reason: "Subscribe failed: \(error.localizedDescription)"))
             return
         }
         isSubscribed = characteristic.isNotifying
         if characteristic.isNotifying {
-            log.info("Subscribed; streaming")
+            trace("Subscribed; streaming")
             onStatus?(.connected)
         }
     }
