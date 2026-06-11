@@ -532,6 +532,39 @@ Notes:
 - The protocol writeups in `docs/protocols/` are our open documentation
   contribution; even if no one else uses the app, those pages have value.
 
+## D2. Hardware probe findings (2026-06-11, real RCT716 on the Mac)
+
+We probed the user's actual device with a throwaway CoreBluetooth CLI on
+macOS while the unit was docked over USB. Findings:
+
+- **Identity.** `GarminDevice.xml` on the mass storage volume confirms
+  RCT716, firmware 5.50, part `006-B3808-00`, unit ID `3506078425`.
+- **USB is mass storage only.** The volume exposes `DCIM` (dashcam MP4s,
+  `100EVENT`, `101PHOTO`, `102SAVED`, `103UNSVD`), GPX in/out, error
+  report JSONs, and the firmware update drop point. No live data channel
+  over USB; the radar feed is BLE only, as assumed.
+- **Advertising confirmed.** Even while docked, the device advertises as
+  `RCT716-78425` (suffix is the unit ID tail) with exactly the expected
+  radar service `6A4E3200-667B-11E3-949A-0800200C9A66` in the
+  advertisement. Strong signal (RSSI around -40 at desk range).
+- **Connection refused while docked.** Every connection attempt succeeds
+  at the link layer, then the device drops us about one second later
+  (`CBErrorDomain code 7`, peripheral initiated) before GATT service
+  discovery returns. Reproduced across ~40 attempts, including after
+  ejecting the mass storage volume. Two candidate explanations, untested
+  because both need physical action:
+  1. Varia firmware disables live sessions while on USB power
+     (most likely; matches how the unit behaves with an Edge while
+     charging).
+  2. The RCT7xx requires pairing/bonding for new centrals (the RTL5xx
+     line did not, per community reports, but the camera models have a
+     richer pairing flow in the Varia app).
+- **Next bench step.** Unplug the unit, power it on normally, re-run the
+  probe, and capture: full GATT table, the radar characteristic UUID
+  (confirm `6A4E3201-...` or whatever the real value is), notify frames
+  with no traffic, and notify frames while a person/car approaches.
+  Save raw hex dumps as fixtures under `Fixtures/`.
+
 ## E. Risks and open questions
 
 | # | Risk / question                                                   | Severity | Mitigation / next step                                                                 |
