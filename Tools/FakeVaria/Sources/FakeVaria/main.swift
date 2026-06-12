@@ -24,12 +24,10 @@ guard let scenario = RadarScript.Scenario(rawValue: scenarioName) else {
 
 final class FakeVaria: NSObject, CBPeripheralManagerDelegate {
     private var manager: CBPeripheralManager!
-    private let measurement = CBMutableCharacteristic(
-        type: CBUUID(string: VariaIdentifiers.radarMeasurement),
-        properties: [.notify],
-        value: nil,
-        permissions: [.readable]
-    )
+    // Rebuilt on every power-on: CoreBluetooth forbids adding the same
+    // characteristic instance twice, and Bluetooth can cycle (e.g. Mac
+    // sleep) while the tool runs.
+    private var measurement: CBMutableCharacteristic?
     private let script: RadarScript
     private var tick = 0
     private var timer: DispatchSourceTimer?
@@ -43,14 +41,26 @@ final class FakeVaria: NSObject, CBPeripheralManagerDelegate {
     func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
         switch peripheral.state {
         case .poweredOn:
+            print("Bluetooth on, (re)publishing service")
+            stopStreaming()
+            manager.removeAllServices()
+            manager.stopAdvertising()
+            let characteristic = CBMutableCharacteristic(
+                type: CBUUID(string: VariaIdentifiers.radarMeasurement),
+                properties: [.notify],
+                value: nil,
+                permissions: [.readable]
+            )
+            measurement = characteristic
             let service = CBMutableService(
                 type: CBUUID(string: VariaIdentifiers.service),
                 primary: true
             )
-            service.characteristics = [measurement]
+            service.characteristics = [characteristic]
             manager.add(service)
         case .poweredOff:
-            print("Bluetooth is off")
+            print("Bluetooth is off, pausing")
+            stopStreaming()
         case .unauthorized:
             print("Bluetooth permission denied for this process")
             exit(1)
@@ -102,6 +112,7 @@ final class FakeVaria: NSObject, CBPeripheralManagerDelegate {
     }
 
     private func emit() {
+        guard let measurement else { return }
         let frame = script.tick(tick)
         tick += 1
         guard let data = try? VariaRadarEncoder.encode(frame) else { return }
