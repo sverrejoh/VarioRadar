@@ -65,12 +65,35 @@ struct VariaRadarParserTests {
         #expect(frame.nearestThreat?.distanceMeters == 15)
     }
 
-    @Test("a length that is not 1 + 3n is rejected")
-    func malformedLength() {
-        // 3 bytes total: counter + 2 leftover bytes, not a whole target
-        #expect(throws: VariaRadarParser.ParseError.malformedLength(3)) {
-            try VariaRadarParser.parse(hex("10 01 8c"))
-        }
+    @Test("trailing bytes that do not complete a target are ignored")
+    func trailingBytesIgnored() throws {
+        // counter + one full target + a 2-byte remainder
+        let frame = try VariaRadarParser.parse(hex("10 01 3c 28 02 99"))
+        #expect(frame.threats == [Threat(id: 1, distanceMeters: 60, speedKmh: 40)])
+    }
+
+    @Test("a short non-target remainder yields a clear frame, not an error")
+    func shortRemainderIsClear() throws {
+        // counter + 2 leftover bytes, no complete target
+        let frame = try VariaRadarParser.parse(hex("10 01 8c"))
+        #expect(frame.packetCounter == 0x10)
+        #expect(frame.isClear)
+    }
+
+    @Test("empty slots (distance 0) are skipped")
+    func emptySlotsSkipped() throws {
+        // slot 1 is padding (distance 0); slot 2 is a real car
+        let frame = try VariaRadarParser.parse(hex("00 01 00 00 02 3c 32"))
+        #expect(frame.threats == [Threat(id: 2, distanceMeters: 60, speedKmh: 50)])
+    }
+
+    @Test("RearVue 820 style frame (speed always 0) keeps the car")
+    func rearVue820SpeedZero() throws {
+        // counter c2, one target: id/lateral a0, distance 6 m, speed 0
+        let frame = try VariaRadarParser.parse(hex("c2 a0 06 00"))
+        #expect(frame.threats == [Threat(id: 0xa0, distanceMeters: 6, speedKmh: 0)])
+        // speed 0 still has no closing time but is reported as approaching
+        #expect(frame.threats[0].level == .approaching)
     }
 
     @Test("full byte range round-trips without overflow")
