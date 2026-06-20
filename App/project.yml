@@ -13,7 +13,7 @@ settings:
   base:
     SDKROOT: iphoneos
     SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
-    TARGETED_DEVICE_FAMILY: "1,2"
+    TARGETED_DEVICE_FAMILY: "1"
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
@@ -37,6 +37,7 @@ targets:
       base:
         SDKROOT: iphoneos
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        TARGETED_DEVICE_FAMILY: "1"
         PRODUCT_BUNDLE_IDENTIFIER: com.varioradar.app
         CODE_SIGN_ENTITLEMENTS: Sources/VarioRadar.entitlements
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -46,6 +47,8 @@ targets:
       properties:
         CFBundleDisplayName: VarioRadar
         UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
         NSBluetoothAlwaysUsageDescription: "VarioRadar connects to your Garmin Varia radar over Bluetooth to show approaching vehicles."
         NSSupportsLiveActivities: true
         NSSupportsLiveActivitiesFrequentUpdates: true
@@ -66,6 +69,7 @@ targets:
       base:
         SDKROOT: iphoneos
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        TARGETED_DEVICE_FAMILY: "1"
         PRODUCT_BUNDLE_IDENTIFIER: com.varioradar.app.widgets
         CODE_SIGN_ENTITLEMENTS: Widgets/Sources/VarioRadarWidgets.entitlements
     info:
