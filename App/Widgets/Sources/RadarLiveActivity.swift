@@ -103,15 +103,11 @@ private struct SpeedRing: View {
         } else {
             ZStack {
                 Circle().fill(color)
-                Circle().fill(.black).padding(2.5)
-                VStack(spacing: 0) {
-                    Text("\(presentation.nearestSpeedKmh ?? 0)")
-                        .font(.system(size: 12, weight: .bold).width(.condensed))
-                        .monospacedDigit().contentTransition(.numericText())
-                        .foregroundStyle(color)
-                    Text("km/h").font(.system(size: 6, weight: .bold))
-                        .foregroundStyle(Color(hex: 0x7D8389))
-                }
+                Circle().fill(Color(hex: 0xF1F2F3)).padding(3)
+                Text("\(presentation.nearestSpeedKmh ?? 0)")
+                    .font(.system(size: 13, weight: .heavy).width(.condensed))
+                    .monospacedDigit().contentTransition(.numericText())
+                    .foregroundStyle(Color(hex: 0x0B0C0F))
             }
             .frame(width: 26, height: 26)
         }
