@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import UIKit
 import VarioRadarCore
 
 /// The single source of truth for the UI. Owns a `RadarSource`, pumps its
@@ -26,7 +27,14 @@ final class RadarSessionStore: ObservableObject {
 
     private var source: RadarSource?
     private let activity = RadarActivityManager()
+    private let alertPlayer = AlertPlayer()
     private let kindDefaultsKey = "radarSourceKind"
+
+    // Rising-edge contact alerting: fire once on clear -> car, re-arm only
+    // after the road has been clear for ~1 s so flickering contacts do not
+    // re-trigger the cue.
+    private var contactArmed = true
+    private var clearStreak = 0
 
     init(defaultKind: SourceKind) {
         let stored = UserDefaults.standard.string(forKey: "radarSourceKind")
@@ -71,6 +79,8 @@ final class RadarSessionStore: ObservableObject {
         frame = nil
         deviceName = nil
         status = .idle
+        contactArmed = true
+        clearStreak = 0
     }
 
     private func makeSource() -> RadarSource {
@@ -84,7 +94,23 @@ final class RadarSessionStore: ObservableObject {
         self.frame = frame
         let presentation = RadarPresentation(frame: frame, now: frame.receivedAt ?? Date())
         AppGroup.writeSnapshot(presentation)
-        activity.update(presentation)
         WatchLink.shared.send(presentation)
+
+        if frame.isClear {
+            clearStreak += 1
+            if clearStreak >= 8 { contactArmed = true } // ~1 s clear re-arms
+            activity.update(presentation)
+            return
+        }
+
+        clearStreak = 0
+        let rising = contactArmed
+        if rising { contactArmed = false }
+        let appActive = UIApplication.shared.applicationState == .active
+        // Foreground: play our cue directly. Background: let the Live
+        // Activity alert play the system cue (so it sounds with the app
+        // suspended, and we never double up).
+        activity.update(presentation, alerting: rising && !appActive)
+        if rising && appActive { alertPlayer.playContactAlert() }
     }
 }

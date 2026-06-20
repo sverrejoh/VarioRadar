@@ -54,7 +54,7 @@ final class RadarActivityManager {
         }
     }
 
-    func update(_ presentation: RadarPresentation) {
+    func update(_ presentation: RadarPresentation, alerting: Bool = false) {
         guard let activity else { return }
         // A frame should arrive every second; if it stops for 5, let the
         // system mark the activity stale so the rider does not trust an
@@ -65,7 +65,18 @@ final class RadarActivityManager {
         if updateCount == 1 || updateCount % 30 == 0 {
             trace("Update #\(self.updateCount): \(presentation.isClear ? "clear" : "\(presentation.threatCount) car(s), nearest \(presentation.nearestDistanceMeters ?? -1) m") -> \(activity.id)")
         }
-        Task { await activity.update(content) }
+        if alerting {
+            // System plays the sound + haptic over any audio, respecting
+            // Focus; this is the background "car appeared" cue.
+            let alert = AlertConfiguration(
+                title: "Vehicle approaching",
+                body: "Car detected behind you",
+                sound: .named("contact.caf"))
+            trace("Alerting: car appeared")
+            Task { await activity.update(content, alertConfiguration: alert) }
+        } else {
+            Task { await activity.update(content) }
+        }
     }
 
     func end() {
