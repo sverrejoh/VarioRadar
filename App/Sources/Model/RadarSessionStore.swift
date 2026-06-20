@@ -31,6 +31,7 @@ final class RadarSessionStore: ObservableObject {
     init(defaultKind: SourceKind) {
         let stored = UserDefaults.standard.string(forKey: "radarSourceKind")
         self.sourceKind = stored.flatMap(SourceKind.init(rawValue:)) ?? defaultKind
+        WatchLink.shared.activate()
     }
 
     var presentation: RadarPresentation {
@@ -84,5 +85,6 @@ final class RadarSessionStore: ObservableObject {
         let presentation = RadarPresentation(frame: frame, now: frame.receivedAt ?? Date())
         AppGroup.writeSnapshot(presentation)
         activity.update(presentation)
+        WatchLink.shared.send(presentation)
     }
 }
