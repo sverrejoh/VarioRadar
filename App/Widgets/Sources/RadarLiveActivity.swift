@@ -39,7 +39,7 @@ struct RadarLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     HStack(alignment: .center, spacing: 16) {
-                        RadarScope(cars: p.cars, size: 116, isStale: stale)
+                        RadarScope(cars: p.cars, size: 84, isStale: stale)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("NEAREST")
                                 .font(.system(size: 9, weight: .semibold)).kerning(1.1)
