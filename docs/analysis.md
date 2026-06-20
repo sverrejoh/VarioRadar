@@ -645,6 +645,29 @@ path with simultaneous bluetoothd logging:
   ("put your radar in pairing mode"). After that, reconnects are
   automatic and unattended.
 
+### D2.2 Update (2026-06-20): the drop loop was a radar firmware bug
+
+The aggressive "drops the central ~1 s after connect" behaviour that cost
+us several debugging rounds turned out to be a **fault in the radar's
+firmware**, not a deliberate anti-third-party measure. Evidence: the unit
+also failed to stay connected to the *official Garmin Varia app*. After
+the user factory-reset and firmware-upgraded the RCT716, a fresh macOS
+probe connected cleanly:
+
+- A brief (~1.5 s) encryption renegotiation at connect using the bond keys
+  that survived the upgrade (a handful of "Failed to encrypt STATUS 634"
+  and reason-762 micro-disconnects), then it settled.
+- 41 s of uninterrupted streaming afterwards, 331 notifications at ~8 Hz,
+  zero drops. No fresh pairing prompt (the existing bond was reused).
+
+So the platform conclusions stand (a bond is required; Just Works SMP
+works), but the device is not hostile once on good firmware. The app
+should still (a) guide first-time pairing and (b) tolerate a short burst
+of encryption-retry disconnects at the very start of a session before
+treating the link as healthy. All captures to date remain clear-road
+(single-byte counter frames, low nibble 0x2, high nibble rolling); the
+**multi-target frame layout is still unconfirmed against live traffic**.
+
 ## E. Risks and open questions
 
 | # | Risk / question                                                   | Severity | Mitigation / next step                                                                 |
