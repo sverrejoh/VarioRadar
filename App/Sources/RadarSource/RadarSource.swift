@@ -27,6 +27,10 @@ enum RadarConnectionStatus: Equatable {
 protocol RadarSource: AnyObject {
     var onFrame: ((RadarFrame) -> Void)? { get set }
     var onStatus: ((RadarConnectionStatus) -> Void)? { get set }
+    /// Reports the human-readable name of the connected device (the real
+    /// peripheral's advertised name, or a label for the demo source), so
+    /// the UI can show exactly what it is talking to.
+    var onDeviceName: ((String?) -> Void)? { get set }
     func start()
     func stop()
 }

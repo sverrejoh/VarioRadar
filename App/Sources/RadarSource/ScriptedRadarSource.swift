@@ -7,6 +7,7 @@ import VarioRadarCore
 final class ScriptedRadarSource: RadarSource {
     var onFrame: ((RadarFrame) -> Void)?
     var onStatus: ((RadarConnectionStatus) -> Void)?
+    var onDeviceName: ((String?) -> Void)?
 
     private let script: RadarScript
     private var timer: Timer?
@@ -17,6 +18,7 @@ final class ScriptedRadarSource: RadarSource {
     }
 
     func start() {
+        onDeviceName?("Demo")
         onStatus?(.connected)
         timer?.invalidate()
         let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in

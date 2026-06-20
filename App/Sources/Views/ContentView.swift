@@ -64,9 +64,11 @@ private struct RadarDashboard: View {
             Spacer()
             HStack(spacing: 6) {
                 let demo = store.sourceKind == .demo
-                Circle().fill(demo ? Color.variaAccent : Color(hex: 0x2FD97A)).frame(width: 6, height: 6)
-                    .shadow(color: demo ? Color.variaAccent : Color(hex: 0x2FD97A), radius: 6)
-                Text(demo ? "DEMO" : "RCT716").font(.system(size: 9, weight: .bold)).kerning(0.6)
+                let dotColor = demo ? Color.variaAccent : Color(hex: 0x2FD97A)
+                Circle().fill(dotColor).frame(width: 6, height: 6)
+                    .shadow(color: dotColor, radius: 6)
+                Text(store.deviceName ?? (demo ? "DEMO" : "RADAR"))
+                    .font(.system(size: 9, weight: .bold)).kerning(0.6).lineLimit(1)
                     .foregroundStyle(Color(hex: 0xC9CCD0))
                 Text("›").font(.system(size: 10, weight: .bold)).foregroundStyle(Color(hex: 0x6B7178))
             }

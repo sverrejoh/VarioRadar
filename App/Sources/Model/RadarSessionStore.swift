@@ -20,6 +20,9 @@ final class RadarSessionStore: ObservableObject {
     @Published private(set) var status: RadarConnectionStatus = .idle
     @Published private(set) var isRunning = false
     @Published private(set) var sourceKind: SourceKind
+    /// Name of the connected device (e.g. "RCT716-78425", "FakeVaria",
+    /// "Demo"), or nil before connection.
+    @Published private(set) var deviceName: String?
 
     private var source: RadarSource?
     private let activity = RadarActivityManager()
@@ -51,6 +54,7 @@ final class RadarSessionStore: ObservableObject {
         let source = makeSource()
         source.onFrame = { [weak self] frame in self?.handle(frame) }
         source.onStatus = { [weak self] status in self?.status = status }
+        source.onDeviceName = { [weak self] name in self?.deviceName = name }
         self.source = source
         isRunning = true
         activity.start()
@@ -64,6 +68,7 @@ final class RadarSessionStore: ObservableObject {
         source = nil
         activity.end()
         frame = nil
+        deviceName = nil
         status = .idle
     }
 

@@ -22,10 +22,12 @@ import VarioRadarCore
 final class BLERadarSource: NSObject, RadarSource {
     var onFrame: ((RadarFrame) -> Void)?
     var onStatus: ((RadarConnectionStatus) -> Void)?
+    var onDeviceName: ((String?) -> Void)?
 
     private var central: CBCentralManager?
     private var radar: CBPeripheral?
     private var isSubscribed = false
+    private var discoveredName: String?
     private let recorder = RawFrameRecorder()
 
     private let serviceUUID = CBUUID(string: VariaIdentifiers.service)
@@ -113,7 +115,9 @@ extension BLERadarSource: CBCentralManagerDelegate {
                         didDiscover peripheral: CBPeripheral,
                         advertisementData: [String: Any],
                         rssi RSSI: NSNumber) {
-        trace("Discovered \(peripheral.name ?? "?") rssi \(RSSI.intValue)")
+        let advName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
+        discoveredName = advName ?? peripheral.name
+        trace("Discovered \(discoveredName ?? "?") rssi \(RSSI.intValue)")
         central.stopScan()
         connect(peripheral, with: central)
     }
@@ -121,6 +125,7 @@ extension BLERadarSource: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         // Link is up, but not yet streaming. Stay in `.connecting` until
         // the notify subscription succeeds.
+        onDeviceName?(discoveredName ?? peripheral.name)
         trace("Link connected, discovering services")
         peripheral.discoverServices([serviceUUID])
     }
