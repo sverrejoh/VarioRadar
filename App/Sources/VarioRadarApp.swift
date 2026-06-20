@@ -6,17 +6,13 @@ struct VarioRadarApp: App {
 
     init() {
         // Default: real radar on device, demo in the simulator (no BLE).
-        // VR_SOURCE=demo|real (launch env) overrides, for headless testing.
+        // The user's persisted choice wins over this default; a VR_SOURCE
+        // launch env (below) overrides everything, for headless testing.
         #if targetEnvironment(simulator)
-        var defaultKind: RadarSessionStore.SourceKind = .demo
+        let defaultKind: RadarSessionStore.SourceKind = .demo
         #else
-        var defaultKind: RadarSessionStore.SourceKind = .real
+        let defaultKind: RadarSessionStore.SourceKind = .real
         #endif
-        switch ProcessInfo.processInfo.environment["VR_SOURCE"] {
-        case "demo": defaultKind = .demo
-        case "real": defaultKind = .real
-        default: break
-        }
         _store = StateObject(wrappedValue: RadarSessionStore(defaultKind: defaultKind))
     }
 
@@ -25,9 +21,13 @@ struct VarioRadarApp: App {
             ContentView()
                 .environmentObject(store)
                 .onAppear {
-                    if ProcessInfo.processInfo.environment["VR_AUTOSTART"] == "1" {
-                        store.start()
+                    let env = ProcessInfo.processInfo.environment
+                    switch env["VR_SOURCE"] {
+                    case "demo": store.setSourceKind(.demo)
+                    case "real": store.setSourceKind(.real)
+                    default: break
                     }
+                    if env["VR_AUTOSTART"] == "1" { store.start() }
                 }
         }
     }
