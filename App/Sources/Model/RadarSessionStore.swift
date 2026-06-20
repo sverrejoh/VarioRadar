@@ -30,11 +30,13 @@ final class RadarSessionStore: ObservableObject {
     private let alertPlayer = AlertPlayer()
     private let kindDefaultsKey = "radarSourceKind"
 
-    // Rising-edge contact alerting: fire once on clear -> car, re-arm only
-    // after the road has been clear for ~1 s so flickering contacts do not
-    // re-trigger the cue.
-    private var contactArmed = true
-    private var clearStreak = 0
+    // Contact alerting: fire on clear -> car. Re-arms on any clear frame
+    // (so every genuine "car appears" chimes), but a cooldown prevents the
+    // cue from machine-gunning when traffic is continuous. Starts disarmed
+    // so a session that opens with a car already present does not ding.
+    private var contactArmed = false
+    private var lastContactAlert = Date.distantPast
+    private let alertCooldown: TimeInterval = 2.5
 
     init(defaultKind: SourceKind) {
         let stored = UserDefaults.standard.string(forKey: "radarSourceKind")
@@ -79,8 +81,8 @@ final class RadarSessionStore: ObservableObject {
         frame = nil
         deviceName = nil
         status = .idle
-        contactArmed = true
-        clearStreak = 0
+        contactArmed = false
+        lastContactAlert = .distantPast
     }
 
     private func makeSource() -> RadarSource {
@@ -97,15 +99,15 @@ final class RadarSessionStore: ObservableObject {
         WatchLink.shared.send(presentation)
 
         if frame.isClear {
-            clearStreak += 1
-            if clearStreak >= 8 { contactArmed = true } // ~1 s clear re-arms
+            contactArmed = true
             activity.update(presentation)
             return
         }
 
-        clearStreak = 0
-        let rising = contactArmed
-        if rising { contactArmed = false }
+        let cooldownPassed = Date().timeIntervalSince(lastContactAlert) > alertCooldown
+        let rising = contactArmed && cooldownPassed
+        contactArmed = false
+        if rising { lastContactAlert = Date() }
         let appActive = UIApplication.shared.applicationState == .active
         // Foreground: play our cue directly. Background: let the Live
         // Activity alert play the system cue (so it sounds with the app
