@@ -3,161 +3,285 @@ import SwiftUI
 import VarioRadarCore
 import WidgetKit
 
-/// The Live Activity: Lock Screen / banner layout plus the three Dynamic
-/// Island presentations. This is the surface that stays visible while the
-/// rider is in another app (e.g. Apple's Workout app).
+// Implementation of the "Varia Radar Island" SCOPE design. Range-only
+// (no bearing): contacts are placed by distance behind the rider. The
+// compact pill pairs closing speed (left of the camera) with nearest
+// distance (right); the expanded and Lock Screen views show the full
+// circular scope. Greys out to "NO SIGNAL" when the activity is stale.
+//
+// Notes vs the HTML prototype: continuous sweep/pulse animations do not
+// run reliably in a Live Activity, so they are static here; numbers use
+// numericText transitions and the closing bar uses ProgressView(timer)
+// which the system does animate on-device. Barlow is substituted with the
+// system font at condensed width (bundling Barlow is a later polish step).
+
 struct RadarLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RadarActivityAttributes.self) { context in
-            RadarLockScreenView(presentation: context.state.presentation)
-                .activityBackgroundTint(.black.opacity(0.7))
+            RadarLockCard(presentation: context.state.presentation, isStale: context.isStale)
+                .activityBackgroundTint(.black.opacity(0.55))
                 .activitySystemActionForegroundColor(.white)
         } dynamicIsland: { context in
-            let presentation = context.state.presentation
+            let p = context.state.presentation
+            let stale = context.isStale
+            let tint = islandColor(p, stale: stale)
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Label {
-                        Text(presentation.isClear ? "Clear" : "\(presentation.threatCount) car\(presentation.threatCount == 1 ? "" : "s")")
-                    } icon: {
-                        Image(systemName: presentation.highestLevel.symbolName)
-                            .foregroundStyle(presentation.highestLevel.color)
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.variaAccent).frame(width: 6, height: 6)
+                        Text(stale ? "VARIA" : "VARIA · \(p.nearestSpeedKmh ?? 0) km/h")
+                            .font(.system(size: 10, weight: .bold)).kerning(1.2)
+                            .foregroundStyle(Color(hex: 0x9AA0A6))
                     }
-                    .font(.headline)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    if let nearest = presentation.nearest {
-                        VStack(alignment: .trailing) {
-                            Text("\(nearest.distanceMeters) m")
-                                .font(.headline)
-                                .monospacedDigit()
-                                .contentTransition(.numericText(countsDown: true))
-                            Text("\(nearest.speedKmh) km/h")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                    }
+                    StatusChip(text: stale ? "NO SIGNAL" : p.statusLabel, color: tint, small: true)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    ApproachTrackView(presentation: presentation, style: .expanded)
-                        .frame(height: 36)
+                    HStack(alignment: .center, spacing: 16) {
+                        RadarScope(cars: p.cars, size: 116, isStale: stale)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("NEAREST")
+                                .font(.system(size: 9, weight: .semibold)).kerning(1.1)
+                                .foregroundStyle(Color(hex: 0x6B7178))
+                            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                                Text(p.nearestDistanceMeters.map(String.init) ?? "—")
+                                    .font(.system(size: 30, weight: .bold).width(.condensed))
+                                    .monospacedDigit()
+                                    .contentTransition(.numericText())
+                                    .foregroundStyle(tint)
+                                Text("m").font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(tint.opacity(0.6))
+                            }
+                            Text("\(p.threatCount) TRACKED")
+                                .font(.system(size: 9, weight: .semibold)).kerning(1.0)
+                                .foregroundStyle(Color(hex: 0x6B7178))
+                            if !stale, let car = p.nearest { ClosingBar(car: car, color: tint) }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.top, 4)
                 }
             } compactLeading: {
-                Image(systemName: "bicycle")
-                    .foregroundStyle(presentation.isClear ? .green : presentation.highestLevel.color)
+                SpeedRing(presentation: p, color: tint, isStale: stale)
             } compactTrailing: {
-                ApproachTrackView(presentation: presentation, style: .compact)
-                    .frame(width: 52)
+                CompactTrailing(presentation: p, color: tint)
             } minimal: {
-                Image(systemName: presentation.highestLevel.symbolName)
-                    .foregroundStyle(presentation.highestLevel.color)
+                MinimalDot(color: tint, alert: p.highestLevel == .critical && !stale)
             }
-            .keylineTint(presentation.highestLevel.color)
+            .keylineTint(tint)
         }
     }
 }
 
-/// The approach scene: the rider's bike sits at the leading edge and car
-/// glyphs slide toward it as they close. Distance maps linearly to
-/// horizontal position over the radar's 140 m range. The implicit
-/// animation tweens positions between the 1 Hz radar updates, so cars
-/// glide rather than jump.
-struct ApproachTrackView: View {
-    enum Style {
-        case compact   // Dynamic Island trailing slot, ~52 pt wide
-        case expanded  // expanded island bottom / Lock Screen
-    }
+// MARK: - Shared helpers
 
+func islandColor(_ p: RadarPresentation, stale: Bool) -> Color {
+    stale ? .variaStale : p.highestLevel.color
+}
+
+/// Fraction (0 far, 1 near) of a contact across the 140 m range.
+private func proximity(_ meters: Int) -> CGFloat {
+    1 - min(max(CGFloat(meters) / 140, 0), 1)
+}
+
+// MARK: - Compact
+
+private struct SpeedRing: View {
     let presentation: RadarPresentation
-    var style: Style
-    private let maxRange = 140
+    let color: Color
+    let isStale: Bool
+
+    var body: some View {
+        if presentation.isClear && !isStale {
+            HStack(spacing: 5) {
+                Circle().fill(color).frame(width: 8, height: 8)
+                    .shadow(color: color, radius: 4)
+                Text("CLEAR").font(.system(size: 11, weight: .bold)).kerning(1)
+                    .foregroundStyle(color)
+            }
+        } else {
+            ZStack {
+                Circle().fill(color)
+                Circle().fill(.black).padding(2.5)
+                VStack(spacing: 0) {
+                    Text("\(presentation.nearestSpeedKmh ?? 0)")
+                        .font(.system(size: 12, weight: .bold).width(.condensed))
+                        .monospacedDigit().contentTransition(.numericText())
+                        .foregroundStyle(color)
+                    Text("km/h").font(.system(size: 6, weight: .bold))
+                        .foregroundStyle(Color(hex: 0x7D8389))
+                }
+            }
+            .frame(width: 26, height: 26)
+        }
+    }
+}
+
+private struct CompactTrailing: View {
+    let presentation: RadarPresentation
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 1) {
+                Text(presentation.nearestDistanceMeters.map(String.init) ?? "—")
+                    .font(.system(size: 15, weight: .bold).width(.condensed))
+                    .monospacedDigit().contentTransition(.numericText())
+                    .foregroundStyle(color)
+                Text("m").font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color(hex: 0x7D8389))
+            }
+            MiniTrack(cars: presentation.cars, color: color)
+                .frame(width: 42, height: 6)
+        }
+    }
+}
+
+/// Horizontal approach track for the compact pill: far at the right, the
+/// rider (camera cutout) at the left.
+private struct MiniTrack: View {
+    let cars: [RadarPresentation.Car]
+    let color: Color
 
     var body: some View {
         GeometryReader { geo in
-            let width = geo.size.width
-            let midY = geo.size.height / 2
-            let carSize: CGFloat = style == .compact ? 11 : 16
-            // Reserve space at the leading edge for the bike in expanded
-            // style; compact omits the bike (it lives in compactLeading,
-            // on the other side of the island cutout, so the car visually
-            // approaches "around" the island).
-            let bikeZone: CGFloat = style == .compact ? 2 : 22
-            let trackWidth = width - bikeZone - carSize
-
+            let w = geo.size.width
             ZStack(alignment: .leading) {
-                // Road
-                Capsule()
-                    .fill(.white.opacity(0.18))
-                    .frame(height: style == .compact ? 2 : 3)
-                    .padding(.leading, bikeZone)
-
-                if style == .expanded {
-                    Image(systemName: "bicycle")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.cyan)
-                        .position(x: 10, y: midY)
-                }
-
-                if presentation.isClear {
-                    if style == .expanded {
-                        Text("clear")
-                            .font(.caption2)
-                            .foregroundStyle(.green.opacity(0.8))
-                            .position(x: width / 2, y: midY)
-                    }
-                } else {
-                    ForEach(presentation.cars) { car in
-                        let fraction = min(max(CGFloat(car.distanceMeters) / CGFloat(maxRange), 0), 1)
-                        // Compact only labels the nearest car; more would
-                        // collide in the ~52 pt slot.
-                        let showMeters = style == .expanded || car.id == presentation.nearest?.id
-                        VStack(spacing: style == .compact ? -1 : 0) {
-                            Image(systemName: "car.side.fill")
-                                .font(.system(size: carSize, weight: .semibold))
-                                .foregroundStyle(car.level.color)
-                                .shadow(color: car.level.color.opacity(0.7), radius: 3)
-                            if showMeters {
-                                Text("\(car.distanceMeters)")
-                                    .font(.system(size: style == .compact ? 8 : 9, weight: .bold, design: .rounded))
-                                    .monospacedDigit()
-                                    .contentTransition(.numericText(countsDown: true))
-                                    .foregroundStyle(.white.opacity(0.9))
-                            }
-                        }
-                        .position(x: bikeZone + carSize / 2 + fraction * trackWidth, y: midY)
-                    }
+                Capsule().fill(.white.opacity(0.16)).frame(height: 1.5)
+                ForEach(cars) { car in
+                    let x = (4 + (CGFloat(min(car.distanceMeters, 140)) / 140) * 90) / 100 * w
+                    Circle().fill(car.level.color)
+                        .frame(width: 5, height: 5)
+                        .shadow(color: car.level.color, radius: 3)
+                        .position(x: x, y: geo.size.height / 2)
                 }
             }
-            .animation(.linear(duration: 0.9), value: presentation.cars)
         }
     }
 }
 
-/// Lock Screen and banner presentation: status line plus the full track.
-struct RadarLockScreenView: View {
-    let presentation: RadarPresentation
+private struct MinimalDot: View {
+    let color: Color
+    let alert: Bool
+    var body: some View {
+        Circle().fill(color)
+            .frame(width: alert ? 11 : 9, height: alert ? 11 : 9)
+            .shadow(color: color, radius: alert ? 8 : 5)
+    }
+}
+
+// MARK: - Scope
+
+/// The circular radar scope: concentric range rings, a forward marker at
+/// the centre, and contacts placed below it by distance (range-only).
+struct RadarScope: View {
+    let cars: [RadarPresentation.Car]
+    let size: CGFloat
+    let isStale: Bool
 
     var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 10) {
-                Image(systemName: presentation.highestLevel.symbolName)
-                    .font(.title2)
-                    .foregroundStyle(presentation.highestLevel.color)
-                Text(presentation.isClear ? "Road clear" : "Vehicle approaching")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                Spacer()
-                if let nearest = presentation.nearest {
-                    Text("\(nearest.distanceMeters) m")
-                        .font(.title3.bold())
-                        .monospacedDigit()
-                        .contentTransition(.numericText(countsDown: true))
-                        .foregroundStyle(presentation.highestLevel.color)
-                }
+        ZStack {
+            Circle().fill(
+                RadialGradient(colors: [Color(hex: 0x0E1218), Color(hex: 0x070A0E)],
+                               center: .center, startRadius: 0, endRadius: size / 2))
+            Circle().strokeBorder(.white.opacity(0.08), lineWidth: 1)
+            Circle().strokeBorder(.white.opacity(0.07), lineWidth: 1).padding(size * 0.17)
+            Circle().strokeBorder(.white.opacity(0.06), lineWidth: 1).padding(size * 0.34)
+            Rectangle().fill(.white.opacity(0.05)).frame(width: 1)
+            Image(systemName: "arrowtriangle.up.fill")
+                .font(.system(size: size * 0.07))
+                .foregroundStyle(isStale ? Color.variaStale : Color.variaAccent)
+            ForEach(cars) { car in
+                let dn = min(max(CGFloat(car.distanceMeters) / 140, 0), 1)
+                let offsetY = (0.10 + dn * 0.38) * size
+                let blip = 0.045 * size + proximity(car.distanceMeters) * 0.04 * size
+                Circle().fill(car.level.color)
+                    .frame(width: blip, height: blip)
+                    .shadow(color: car.level.color, radius: 4)
+                    .offset(y: offsetY)
             }
-            ApproachTrackView(presentation: presentation, style: .expanded)
-                .frame(height: 30)
         }
-        .padding()
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .overlay(Circle().strokeBorder(.white.opacity(0.06), lineWidth: 1))
+    }
+}
+
+private struct StatusChip: View {
+    let text: String
+    let color: Color
+    var small: Bool = false
+    var body: some View {
+        Text(text)
+            .font(.system(size: small ? 9 : 11, weight: .bold)).kerning(1)
+            .foregroundStyle(color)
+            .padding(.horizontal, small ? 7 : 9).padding(.vertical, small ? 2 : 4)
+            .background(color.opacity(0.13), in: RoundedRectangle(cornerRadius: small ? 6 : 7))
+            .overlay(RoundedRectangle(cornerRadius: small ? 6 : 7)
+                .strokeBorder(color.opacity(0.5), lineWidth: 1))
+    }
+}
+
+/// A self-draining bar that estimates time-to-pass. Uses the timer-driven
+/// ProgressView so it keeps moving on-device between radar updates.
+private struct ClosingBar: View {
+    let car: RadarPresentation.Car
+    let color: Color
+
+    var body: some View {
+        let seconds = closingTime
+        if let seconds, seconds > 0 {
+            ProgressView(timerInterval: Date()...Date().addingTimeInterval(seconds),
+                         countsDown: true) { EmptyView() } currentValueLabel: { EmptyView() }
+                .progressViewStyle(.linear)
+                .tint(color)
+                .frame(width: 70, height: 3)
+                .padding(.top, 3)
+        }
+    }
+
+    private var closingTime: Double? {
+        guard car.speedKmh > 0 else { return nil }
+        return min(Double(car.distanceMeters) / (Double(car.speedKmh) / 3.6), 14)
+    }
+}
+
+// MARK: - Lock Screen / banner
+
+struct RadarLockCard: View {
+    let presentation: RadarPresentation
+    let isStale: Bool
+
+    private var tint: Color { islandColor(presentation, stale: isStale) }
+
+    var body: some View {
+        HStack(spacing: 16) {
+            RadarScope(cars: presentation.cars, size: 78, isStale: isStale)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 7) {
+                    Circle().fill(Color.variaAccent).frame(width: 7, height: 7)
+                    Text("VARIA RADAR").font(.system(size: 10, weight: .bold)).kerning(1.4)
+                        .foregroundStyle(Color(hex: 0x9AA0A6))
+                    Spacer()
+                    StatusChip(text: isStale ? "NO SIGNAL" : presentation.statusLabel,
+                               color: tint, small: true)
+                }
+                Text("NEAREST").font(.system(size: 9, weight: .semibold)).kerning(1.1)
+                    .foregroundStyle(Color(hex: 0x6B7178)).padding(.top, 2)
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(presentation.nearestDistanceMeters.map(String.init) ?? "—")
+                        .font(.system(size: 30, weight: .bold).width(.condensed))
+                        .monospacedDigit().contentTransition(.numericText())
+                        .foregroundStyle(tint)
+                    Text("m").font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(tint.opacity(0.6))
+                }
+                Text(isStale ? "LINK LOST" : "CLOSING +\(presentation.nearestSpeedKmh ?? 0) km/h")
+                    .font(.system(size: 9, weight: .semibold)).kerning(1.0)
+                    .foregroundStyle(Color(hex: 0x6B7178))
+            }
+        }
+        .padding(14)
     }
 }

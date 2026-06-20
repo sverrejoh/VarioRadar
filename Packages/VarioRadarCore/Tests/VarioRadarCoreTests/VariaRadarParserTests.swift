@@ -92,8 +92,8 @@ struct VariaRadarParserTests {
         // counter c2, one target: id/lateral a0, distance 6 m, speed 0
         let frame = try VariaRadarParser.parse(hex("c2 a0 06 00"))
         #expect(frame.threats == [Threat(id: 0xa0, distanceMeters: 6, speedKmh: 0)])
-        // speed 0 still has no closing time but is reported as approaching
-        #expect(frame.threats[0].level == .approaching)
+        // 6 m is critically close regardless of the zeroed speed byte
+        #expect(frame.threats[0].level == .critical)
     }
 
     @Test("full byte range round-trips without overflow")
@@ -114,28 +114,36 @@ struct ThreatSeverityTests {
         #expect(threat.closingTimeSeconds == 10)
     }
 
-    @Test("zero speed has no closing time and reads as approaching")
+    @Test("zero speed still has a distance-based level")
     func zeroSpeed() {
         let threat = Threat(id: 1, distanceMeters: 50, speedKmh: 0)
         #expect(threat.closingTimeSeconds == nil)
-        #expect(threat.level == .approaching)
+        #expect(threat.level == .warning) // 50 m, < 70 m
     }
 
-    @Test("severity escalates as closing time shrinks")
+    @Test("severity escalates by proximity, with a speed kicker")
     func levels() {
-        // 30 m @ 90 km/h (25 m/s) = 1.2 s -> critical
+        // < 30 m, or < 55 m closing >= 40 km/h -> critical
         #expect(Threat(id: 1, distanceMeters: 30, speedKmh: 90).level == .critical)
-        // 100 m @ 60 km/h (16.7 m/s) = 6 s -> warning
-        #expect(Threat(id: 2, distanceMeters: 100, speedKmh: 60).level == .warning)
-        // 140 m @ 30 km/h (8.3 m/s) = 16.8 s -> approaching
-        #expect(Threat(id: 3, distanceMeters: 140, speedKmh: 30).level == .approaching)
+        #expect(Threat(id: 2, distanceMeters: 20, speedKmh: 5).level == .critical)
+        // 30..70 m -> warning
+        #expect(Threat(id: 3, distanceMeters: 60, speedKmh: 25).level == .warning)
+        // 70..110 m -> approaching
+        #expect(Threat(id: 4, distanceMeters: 100, speedKmh: 60).level == .approaching)
+        // >= 110 m -> tracking (detected but distant, shown green)
+        #expect(Threat(id: 5, distanceMeters: 140, speedKmh: 30).level == .tracking)
     }
 
     @Test("frame reports the highest severity present")
     func frameHighestLevel() throws {
         let frame = try VariaRadarParser.parse(hex("00 01 8c 1e 02 1e 5a"))
-        // target 2 is 30 m @ 90 km/h -> critical
+        // target 2 is 30 m @ 90 km/h -> critical; target 1 is 140 m -> tracking
         #expect(frame.highestLevel == .critical)
+    }
+
+    @Test("a clear frame is level none")
+    func clearLevel() throws {
+        #expect(try VariaRadarParser.parse(hex("00")).highestLevel == .none)
     }
 }
 

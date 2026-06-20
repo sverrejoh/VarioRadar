@@ -34,27 +34,31 @@ public extension Threat {
         return Double(distanceMeters) / metresPerSecond
     }
 
-    /// A coarse severity derived from closing time. The thresholds are a
-    /// starting point tuned for road cycling and are expected to be
-    /// adjusted once we have real-world captures; they are intentionally
-    /// kept in one place so they are easy to change.
+    /// Severity, derived from distance with a closing-speed kicker. A
+    /// `Threat` always represents a detected vehicle, so its level is at
+    /// least `.tracking`; only an empty frame is `.none`. Thresholds match
+    /// the "SCOPE" product design and are kept here so they are easy to
+    /// tune against real captures.
     var level: ThreatLevel {
-        guard let closingTime = closingTimeSeconds else { return .approaching }
-        switch closingTime {
-        case ..<4: return .critical
-        case ..<8: return .warning
-        default: return .approaching
-        }
+        if distanceMeters < 30 || (distanceMeters < 55 && speedKmh >= 40) { return .critical }
+        if distanceMeters < 70 { return .warning }
+        if distanceMeters < 110 { return .approaching }
+        return .tracking
     }
 }
 
 /// Client-derived urgency for a threat. Not a value the radar sends; we
 /// compute it so every presentation surface ranks targets the same way.
+///
+/// `none` means the road is clear (no targets). `tracking` is a detected
+/// but distant vehicle (shown green, distinct from clear). The rest
+/// escalate by proximity.
 public enum ThreatLevel: Int, Sendable, Codable, Comparable, CaseIterable {
     case none = 0
-    case approaching = 1
-    case warning = 2
-    case critical = 3
+    case tracking = 1
+    case approaching = 2
+    case warning = 3
+    case critical = 4
 
     public static func < (lhs: ThreatLevel, rhs: ThreatLevel) -> Bool {
         lhs.rawValue < rhs.rawValue
