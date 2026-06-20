@@ -17,6 +17,8 @@ struct ContentView: View {
                 ConnectView(
                     status: store.status,
                     isSearching: store.isRunning,
+                    kind: store.sourceKind,
+                    onKindChange: { store.setSourceKind($0) },
                     onConnect: { store.start() }
                 )
             }
@@ -61,9 +63,10 @@ private struct RadarDashboard: View {
                 .foregroundStyle(Color(hex: 0xC9CCD0))
             Spacer()
             HStack(spacing: 6) {
-                Circle().fill(Color(hex: 0x2FD97A)).frame(width: 6, height: 6)
-                    .shadow(color: Color(hex: 0x2FD97A), radius: 6)
-                Text("RCT716").font(.system(size: 9, weight: .bold)).kerning(0.6)
+                let demo = store.sourceKind == .demo
+                Circle().fill(demo ? Color.variaAccent : Color(hex: 0x2FD97A)).frame(width: 6, height: 6)
+                    .shadow(color: demo ? Color.variaAccent : Color(hex: 0x2FD97A), radius: 6)
+                Text(demo ? "DEMO" : "RCT716").font(.system(size: 9, weight: .bold)).kerning(0.6)
                     .foregroundStyle(Color(hex: 0xC9CCD0))
                 Text("›").font(.system(size: 10, weight: .bold)).foregroundStyle(Color(hex: 0x6B7178))
             }
@@ -140,6 +143,6 @@ private struct StatCard: View {
 }
 
 #Preview {
-    let store = RadarSessionStore(source: ScriptedRadarSource(scenario: .busyRoad))
-    return ContentView().environmentObject(store).onAppear { store.start() }
+    let store = RadarSessionStore(defaultKind: .demo)
+    ContentView().environmentObject(store).onAppear { store.start() }
 }

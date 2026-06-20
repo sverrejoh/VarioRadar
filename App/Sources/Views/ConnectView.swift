@@ -7,7 +7,13 @@ import VarioRadarCore
 struct ConnectView: View {
     let status: RadarConnectionStatus
     let isSearching: Bool
+    let kind: RadarSessionStore.SourceKind
+    let onKindChange: (RadarSessionStore.SourceKind) -> Void
     let onConnect: () -> Void
+
+    private var kindBinding: Binding<RadarSessionStore.SourceKind> {
+        Binding(get: { kind }, set: { onKindChange($0) })
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,9 +38,21 @@ struct ConnectView: View {
                 .frame(maxWidth: 240)
                 .padding(.top, 9)
 
-            DeviceCard(onConnect: onConnect)
+            DeviceCard(kind: kind, connecting: isSearching, onConnect: onConnect)
                 .padding(.top, 26)
                 .padding(.horizontal, 24)
+
+            VStack(spacing: 8) {
+                Text("DATA SOURCE").font(.system(size: 9, weight: .bold)).kerning(1.6)
+                    .foregroundStyle(Color(hex: 0x5A5F65))
+                Picker("Data source", selection: kindBinding) {
+                    Text("Live radar").tag(RadarSessionStore.SourceKind.real)
+                    Text("Demo data").tag(RadarSessionStore.SourceKind.demo)
+                }
+                .pickerStyle(.segmented)
+            }
+            .padding(.top, 22)
+            .padding(.horizontal, 24)
 
             Spacer()
 
@@ -84,25 +102,33 @@ private struct PingingBeacon: View {
 }
 
 private struct DeviceCard: View {
+    let kind: RadarSessionStore.SourceKind
+    let connecting: Bool
     let onConnect: () -> Void
+
+    private var isDemo: Bool { kind == .demo }
 
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 9).fill(Color(hex: 0x1C2026))
-                Circle().stroke(Color.variaAccent, lineWidth: 2).frame(width: 13, height: 13)
+                Image(systemName: isDemo ? "play.circle" : "dot.radiowaves.left.and.right")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.variaAccent)
             }
             .frame(width: 34, height: 34)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("Varia RCT716").font(.system(size: 13, weight: .bold))
+                Text(isDemo ? "Demo data" : "Varia RCT716").font(.system(size: 13, weight: .bold))
                     .foregroundStyle(Color(hex: 0xEEF0F2))
-                Text("Rear radar + tail light · found").font(.system(size: 9, weight: .medium))
+                Text(isDemo ? "Scripted traffic · no radar needed" : "Rear radar + tail light · found")
+                    .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(Color(hex: 0x6B7178))
             }
             Spacer()
             Button(action: onConnect) {
-                Text("Connect").font(.system(size: 11, weight: .bold))
+                Text(connecting ? "..." : (isDemo ? "Start" : "Connect"))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(Color(hex: 0x0B0C0F))
                     .padding(.horizontal, 15).padding(.vertical, 8)
                     .background(Color.variaAccent, in: RoundedRectangle(cornerRadius: 9))

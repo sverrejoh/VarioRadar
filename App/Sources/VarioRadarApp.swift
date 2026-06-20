@@ -5,14 +5,19 @@ struct VarioRadarApp: App {
     @StateObject private var store: RadarSessionStore
 
     init() {
-        // The simulator has no Bluetooth radio, so it always uses the
-        // scripted source. Real hardware uses CoreBluetooth.
+        // Default: real radar on device, demo in the simulator (no BLE).
+        // VR_SOURCE=demo|real (launch env) overrides, for headless testing.
         #if targetEnvironment(simulator)
-        let source: RadarSource = ScriptedRadarSource(scenario: .busyRoad)
+        var defaultKind: RadarSessionStore.SourceKind = .demo
         #else
-        let source: RadarSource = BLERadarSource()
+        var defaultKind: RadarSessionStore.SourceKind = .real
         #endif
-        _store = StateObject(wrappedValue: RadarSessionStore(source: source))
+        switch ProcessInfo.processInfo.environment["VR_SOURCE"] {
+        case "demo": defaultKind = .demo
+        case "real": defaultKind = .real
+        default: break
+        }
+        _store = StateObject(wrappedValue: RadarSessionStore(defaultKind: defaultKind))
     }
 
     var body: some Scene {
@@ -20,9 +25,6 @@ struct VarioRadarApp: App {
             ContentView()
                 .environmentObject(store)
                 .onAppear {
-                    // Debug aid: auto-start a session when launched with
-                    // VR_AUTOSTART=1 (set via devicectl --console), so the
-                    // BLE lifecycle can be observed without tapping.
                     if ProcessInfo.processInfo.environment["VR_AUTOSTART"] == "1" {
                         store.start()
                     }

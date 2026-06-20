@@ -29,13 +29,15 @@ struct RadarLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.leading) {
                     HStack(spacing: 6) {
                         Circle().fill(Color.variaAccent).frame(width: 6, height: 6)
-                        Text(stale ? "VARIA" : "VARIA · \(p.nearestSpeedKmh ?? 0) km/h")
-                            .font(.system(size: 10, weight: .bold)).kerning(1.2)
+                        Text("VARIA").font(.system(size: 11, weight: .bold)).kerning(1.0)
                             .foregroundStyle(Color(hex: 0x9AA0A6))
                     }
+                    .padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     StatusChip(text: stale ? "NO SIGNAL" : p.statusLabel, color: tint, small: true)
+                        .lineLimit(1)
+                        .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     HStack(alignment: .center, spacing: 16) {
@@ -53,8 +55,9 @@ struct RadarLiveActivity: Widget {
                                 Text("m").font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(tint.opacity(0.6))
                             }
-                            Text("\(p.threatCount) TRACKED")
-                                .font(.system(size: 9, weight: .semibold)).kerning(1.0)
+                            Text(stale ? "\(p.threatCount) TRACKED"
+                                       : "+\(p.nearestSpeedKmh ?? 0) km/h · \(p.threatCount) tracked")
+                                .font(.system(size: 9, weight: .semibold)).kerning(0.6)
                                 .foregroundStyle(Color(hex: 0x6B7178))
                             if !stale, let car = p.nearest { ClosingBar(car: car, color: tint) }
                         }
