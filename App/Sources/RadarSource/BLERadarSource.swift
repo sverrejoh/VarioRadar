@@ -28,6 +28,8 @@ final class BLERadarSource: NSObject, RadarSource {
     private var radar: CBPeripheral?
     private var isSubscribed = false
     private var discoveredName: String?
+    private var rateCount = 0
+    private var rateWindowStart = Date()
     private let recorder = RawFrameRecorder()
 
     private let serviceUUID = CBUUID(string: VariaIdentifiers.service)
@@ -197,11 +199,25 @@ extension BLERadarSource: CBPeripheralDelegate {
         do {
             let frame = try VariaRadarParser.parse(data)
             recorder.record(data)
+            measureRate()
             onFrame?(frame.stamped(at: Date()))
         } catch {
             recorder.record(data, parseFailed: true)
             let hex = data.map { String(format: "%02x", $0) }.joined()
             trace("Parse FAILED (\(error)): \(hex)")
+        }
+    }
+
+    /// Logs the measured notification rate every ~2 s, to see how fast the
+    /// radar actually delivers frames (and whether it drops in background).
+    private func measureRate() {
+        rateCount += 1
+        let dt = Date().timeIntervalSince(rateWindowStart)
+        if dt >= 2 {
+            let hz = Double(rateCount) / dt
+            trace(String(format: "rate %.1f Hz (%d frames / %.1fs)", hz, rateCount, dt))
+            rateCount = 0
+            rateWindowStart = Date()
         }
     }
 }

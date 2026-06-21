@@ -41,6 +41,7 @@ final class RadarSessionStore: ObservableObject {
     // Live Activity update throttling (see handle).
     private var lastIslandUpdate = Date.distantPast
     private var lastIslandSignature = ""
+    private var lastImportantSignature = ""
     private var lastSnapshot = Date.distantPast
 
     init(defaultKind: SourceKind) {
@@ -90,6 +91,7 @@ final class RadarSessionStore: ObservableObject {
         lastContactAlert = .distantPast
         lastIslandUpdate = .distantPast
         lastIslandSignature = ""
+        lastImportantSignature = ""
         lastSnapshot = .distantPast
     }
 
@@ -119,16 +121,20 @@ final class RadarSessionStore: ObservableObject {
         }
 
         // Throttle Live Activity updates. Flooding ActivityKit at the
-        // radar's ~8 Hz makes the system coalesce and lag everything,
-        // including appear/disappear. Instead push on a meaningful change
-        // (>= 0.35 s apart) or at least once a second, and always on an
-        // alert. iOS animates between these snapshots.
-        let signature = islandSignature(presentation)
+        // radar's ~8 Hz makes the system coalesce and lag everything.
+        // Important signals (a car appears/drops, severity changes) must
+        // always pass immediately; only pure movement is rate-limited, and
+        // the view interpolates motion between snapshots on-device.
+        let importantSig = presentation.isClear
+            ? "clear" : "\(presentation.threatCount)|\(presentation.highestLevelRaw)"
+        let movementSig = islandSignature(presentation)
         let elapsed = now.timeIntervalSince(lastIslandUpdate)
-        let changed = signature != lastIslandSignature
-        if rising || (changed && elapsed >= 0.35) || elapsed >= 1.0 {
+        let importantChanged = importantSig != lastImportantSignature
+        let moved = movementSig != lastIslandSignature
+        if rising || importantChanged || (moved && elapsed >= 0.35) || elapsed >= 1.0 {
             lastIslandUpdate = now
-            lastIslandSignature = signature
+            lastIslandSignature = movementSig
+            lastImportantSignature = importantSig
             let appActive = UIApplication.shared.applicationState == .active
             activity.update(presentation, alerting: rising && !appActive)
             if rising && appActive { alertPlayer.playContactAlert() }

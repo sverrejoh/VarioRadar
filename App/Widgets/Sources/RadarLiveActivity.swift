@@ -131,8 +131,15 @@ private struct CompactTrailing: View {
                 Text("m").font(.system(size: 9, weight: .bold))
                     .foregroundStyle(Color(hex: 0x7D8389))
             }
-            MiniTrack(cars: presentation.cars, color: color)
-                .frame(width: 42, height: 6)
+            // A self-draining bar (animated on-device) when a contact is
+            // closing, so the pill keeps moving between sparse background
+            // updates; falls back to static dots when speed is unknown.
+            if let car = presentation.nearest, car.speedKmh > 0 {
+                ClosingBar(car: car, color: color, width: 42, height: 5)
+            } else {
+                MiniTrack(cars: presentation.cars, color: color)
+                    .frame(width: 42, height: 6)
+            }
         }
     }
 }
@@ -223,20 +230,22 @@ private struct StatusChip: View {
 }
 
 /// A self-draining bar that estimates time-to-pass. Uses the timer-driven
-/// ProgressView so it keeps moving on-device between radar updates.
+/// ProgressView so it keeps moving on-device between radar updates, even
+/// when the system is throttling Live Activity refreshes in the background.
 private struct ClosingBar: View {
     let car: RadarPresentation.Car
     let color: Color
+    var width: CGFloat = 70
+    var height: CGFloat = 3
 
     var body: some View {
-        let seconds = closingTime
-        if let seconds, seconds > 0 {
+        if let seconds = closingTime, seconds > 0 {
             ProgressView(timerInterval: Date()...Date().addingTimeInterval(seconds),
                          countsDown: true) { EmptyView() } currentValueLabel: { EmptyView() }
                 .progressViewStyle(.linear)
                 .tint(color)
-                .frame(width: 70, height: 3)
-                .padding(.top, 3)
+                .frame(width: width, height: height)
+                .padding(.top, 2)
         }
     }
 
