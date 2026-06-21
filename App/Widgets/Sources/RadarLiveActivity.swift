@@ -40,7 +40,7 @@ struct RadarLiveActivity: Widget {
                         .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    HStack(alignment: .center, spacing: 16) {
+                    HStack(alignment: .center, spacing: 14) {
                         RadarScope(cars: p.cars, size: 84, isStale: stale)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("NEAREST")
@@ -55,13 +55,14 @@ struct RadarLiveActivity: Widget {
                                 Text("m").font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(tint.opacity(0.6))
                             }
-                            Text(stale ? "\(p.threatCount) TRACKED"
-                                       : "+\(p.nearestSpeedKmh ?? 0) km/h · \(p.threatCount) tracked")
+                            Text("\(p.threatCount) tracked")
                                 .font(.system(size: 9, weight: .semibold)).kerning(0.6)
                                 .foregroundStyle(Color(hex: 0x6B7178))
                             if !stale, let car = p.nearest { ClosingBar(car: car, color: tint) }
                         }
                         Spacer(minLength: 0)
+                        SpeedRingView(speedKmh: (stale || p.isClear) ? nil : p.nearestSpeedKmh,
+                                      color: tint, size: 50)
                     }
                     .padding(.top, 4)
                 }

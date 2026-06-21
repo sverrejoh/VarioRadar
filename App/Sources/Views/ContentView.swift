@@ -103,9 +103,13 @@ private struct RadarDashboard: View {
     }
 
     private var statRow: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             StatCard(label: "NEAREST", value: p.nearestDistanceMeters.map(String.init) ?? "—", unit: "m")
-            StatCard(label: "CLOSING", value: "+\(p.nearestSpeedKmh ?? 0)", unit: "km/h")
+            VStack(spacing: 3) {
+                Text("CLOSING").font(.system(size: 8, weight: .bold)).kerning(1.2)
+                    .foregroundStyle(Color(hex: 0x6B7178))
+                SpeedRingView(speedKmh: p.isClear ? nil : p.nearestSpeedKmh, color: tint, size: 66)
+            }
             StatCard(label: "CARS", value: "\(p.threatCount)", unit: nil, flex: 0.7)
         }
     }
