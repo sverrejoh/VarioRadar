@@ -43,6 +43,7 @@ final class BLERadarSource: NSObject, RadarSource {
     private func trace(_ message: String) {
         log.info("\(message, privacy: .public)")
         print("[ble] \(message)")
+        SessionLogger.shared.log("ble: \(message)")
     }
 
     func start() {

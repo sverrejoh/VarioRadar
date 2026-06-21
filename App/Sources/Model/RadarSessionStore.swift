@@ -47,6 +47,12 @@ final class RadarSessionStore: ObservableObject {
         let stored = UserDefaults.standard.string(forKey: "radarSourceKind")
         self.sourceKind = stored.flatMap(SourceKind.init(rawValue:)) ?? defaultKind
         WatchLink.shared.activate()
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { _ in SessionLogger.shared.log("app -> background") }
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main
+        ) { _ in SessionLogger.shared.log("app -> foreground") }
     }
 
     var presentation: RadarPresentation {
@@ -67,6 +73,9 @@ final class RadarSessionStore: ObservableObject {
 
     func start() {
         guard !isRunning else { return }
+        SessionLogger.shared.start()
+        SessionLogger.shared.log("source=\(sourceKind.rawValue)")
+        NotificationManager.shared.requestAuthorization()
         let source = makeSource()
         source.onFrame = { [weak self] frame in self?.handle(frame) }
         source.onStatus = { [weak self] status in self?.status = status }
@@ -80,6 +89,7 @@ final class RadarSessionStore: ObservableObject {
     func stop() {
         guard isRunning else { return }
         isRunning = false
+        SessionLogger.shared.stop()
         source?.stop()
         source = nil
         activity.end()
@@ -139,6 +149,11 @@ final class RadarSessionStore: ObservableObject {
             let appActive = UIApplication.shared.applicationState == .active
             activity.update(presentation, alerting: rising && !appActive)
             if rising && appActive { alertPlayer.playContactAlert() }
+            if rising {
+                NotificationManager.shared.notifyContact(distanceMeters: presentation.nearestDistanceMeters)
+                SessionLogger.shared.log("ALERT contact nearest=\(presentation.nearestDistanceMeters ?? -1)m sev=\(presentation.highestLevelRaw)")
+            }
+            SessionLogger.shared.log("island \(presentation.isClear ? "clear" : "n=\(presentation.threatCount) nearest=\(presentation.nearestDistanceMeters ?? -1)m sev=\(presentation.highestLevelRaw)")")
         }
 
         // App Group snapshot (widgets) at ~1 Hz; watch link self-throttles.
