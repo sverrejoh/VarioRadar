@@ -38,6 +38,11 @@ final class RadarSessionStore: ObservableObject {
     private var lastContactAlert = Date.distantPast
     private let alertCooldown: TimeInterval = 2.5
 
+    // Live Activity update throttling (see handle).
+    private var lastIslandUpdate = Date.distantPast
+    private var lastIslandSignature = ""
+    private var lastSnapshot = Date.distantPast
+
     init(defaultKind: SourceKind) {
         let stored = UserDefaults.standard.string(forKey: "radarSourceKind")
         self.sourceKind = stored.flatMap(SourceKind.init(rawValue:)) ?? defaultKind
@@ -83,6 +88,9 @@ final class RadarSessionStore: ObservableObject {
         status = .idle
         contactArmed = false
         lastContactAlert = .distantPast
+        lastIslandUpdate = .distantPast
+        lastIslandSignature = ""
+        lastSnapshot = .distantPast
     }
 
     private func makeSource() -> RadarSource {
@@ -93,26 +101,53 @@ final class RadarSessionStore: ObservableObject {
     }
 
     private func handle(_ frame: RadarFrame) {
-        self.frame = frame
+        let now = Date()
+        self.frame = frame  // in-app UI updates every frame (no throttle)
         let presentation = RadarPresentation(frame: frame, now: frame.receivedAt ?? Date())
-        AppGroup.writeSnapshot(presentation)
-        WatchLink.shared.send(presentation)
 
+        // Determine the contact-alert rising edge first; an alert always
+        // forces an immediate Live Activity update regardless of throttle.
+        var rising = false
         if frame.isClear {
             contactArmed = true
-            activity.update(presentation)
-            return
+        } else if contactArmed, now.timeIntervalSince(lastContactAlert) > alertCooldown {
+            rising = true
+            contactArmed = false
+            lastContactAlert = now
+        } else {
+            contactArmed = false
         }
 
-        let cooldownPassed = Date().timeIntervalSince(lastContactAlert) > alertCooldown
-        let rising = contactArmed && cooldownPassed
-        contactArmed = false
-        if rising { lastContactAlert = Date() }
-        let appActive = UIApplication.shared.applicationState == .active
-        // Foreground: play our cue directly. Background: let the Live
-        // Activity alert play the system cue (so it sounds with the app
-        // suspended, and we never double up).
-        activity.update(presentation, alerting: rising && !appActive)
-        if rising && appActive { alertPlayer.playContactAlert() }
+        // Throttle Live Activity updates. Flooding ActivityKit at the
+        // radar's ~8 Hz makes the system coalesce and lag everything,
+        // including appear/disappear. Instead push on a meaningful change
+        // (>= 0.35 s apart) or at least once a second, and always on an
+        // alert. iOS animates between these snapshots.
+        let signature = islandSignature(presentation)
+        let elapsed = now.timeIntervalSince(lastIslandUpdate)
+        let changed = signature != lastIslandSignature
+        if rising || (changed && elapsed >= 0.35) || elapsed >= 1.0 {
+            lastIslandUpdate = now
+            lastIslandSignature = signature
+            let appActive = UIApplication.shared.applicationState == .active
+            activity.update(presentation, alerting: rising && !appActive)
+            if rising && appActive { alertPlayer.playContactAlert() }
+        }
+
+        // App Group snapshot (widgets) at ~1 Hz; watch link self-throttles.
+        if now.timeIntervalSince(lastSnapshot) >= 1.0 {
+            lastSnapshot = now
+            AppGroup.writeSnapshot(presentation)
+        }
+        WatchLink.shared.send(presentation)
+    }
+
+    /// A coarse fingerprint of what the island shows: car identities and
+    /// their 5 m distance bucket, plus severity. Changes when a car
+    /// appears, drops, escalates, or moves a noticeable amount.
+    private func islandSignature(_ p: RadarPresentation) -> String {
+        if p.isClear { return "clear" }
+        let cars = p.cars.map { "\($0.id):\($0.distanceMeters / 5)" }.joined(separator: ",")
+        return "\(p.highestLevelRaw)|\(cars)"
     }
 }
