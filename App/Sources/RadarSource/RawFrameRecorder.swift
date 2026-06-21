@@ -10,6 +10,9 @@ import Foundation
 final class RawFrameRecorder {
     private var handle: FileHandle?
     private let formatter = ISO8601DateFormatter()
+    // All file I/O happens here, off the BLE/main queue, so recording never
+    // competes with the main thread that drives the UI and Live Activity.
+    private let queue = DispatchQueue(label: "com.varioradar.capture", qos: .utility)
 
     init() {
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -22,14 +25,16 @@ final class RawFrameRecorder {
     }
 
     func record(_ data: Data, parseFailed: Bool = false) {
-        guard let handle else { return }
         let hex = data.map { String(format: "%02x", $0) }.joined()
         let marker = parseFailed ? "\tPARSE_FAILED" : ""
         let line = "\(formatter.string(from: Date()))\t\(hex)\(marker)\n"
-        handle.write(Data(line.utf8))
+        queue.async { [weak self] in
+            self?.handle?.write(Data(line.utf8))
+        }
     }
 
     deinit {
-        try? handle?.close()
+        let handle = self.handle
+        queue.async { try? handle?.close() }
     }
 }

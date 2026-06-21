@@ -40,7 +40,6 @@ final class RadarSessionStore: ObservableObject {
 
     // Live Activity update throttling (see handle).
     private var lastIslandUpdate = Date.distantPast
-    private var lastIslandSignature = ""
     private var lastImportantSignature = ""
     private var lastSnapshot = Date.distantPast
 
@@ -90,7 +89,6 @@ final class RadarSessionStore: ObservableObject {
         contactArmed = false
         lastContactAlert = .distantPast
         lastIslandUpdate = .distantPast
-        lastIslandSignature = ""
         lastImportantSignature = ""
         lastSnapshot = .distantPast
     }
@@ -125,15 +123,18 @@ final class RadarSessionStore: ObservableObject {
         // Important signals (a car appears/drops, severity changes) must
         // always pass immediately; only pure movement is rate-limited, and
         // the view interpolates motion between snapshots on-device.
+        // Demo (a steady 1 Hz) renders smoothly in the background, so 1 Hz
+        // sits within the system budget. Match it: pure movement rides a
+        // 1 Hz cadence (motion is interpolated on-device between snapshots),
+        // important changes (car appears/drops, severity) get a faster 0.5 s
+        // floor, and an alert always passes immediately. Sending more than
+        // this overruns the background budget and makes live LAG behind demo.
         let importantSig = presentation.isClear
             ? "clear" : "\(presentation.threatCount)|\(presentation.highestLevelRaw)"
-        let movementSig = islandSignature(presentation)
         let elapsed = now.timeIntervalSince(lastIslandUpdate)
         let importantChanged = importantSig != lastImportantSignature
-        let moved = movementSig != lastIslandSignature
-        if rising || importantChanged || (moved && elapsed >= 0.35) || elapsed >= 1.0 {
+        if rising || elapsed >= 1.0 || (importantChanged && elapsed >= 0.5) {
             lastIslandUpdate = now
-            lastIslandSignature = movementSig
             lastImportantSignature = importantSig
             let appActive = UIApplication.shared.applicationState == .active
             activity.update(presentation, alerting: rising && !appActive)
@@ -146,14 +147,5 @@ final class RadarSessionStore: ObservableObject {
             AppGroup.writeSnapshot(presentation)
         }
         WatchLink.shared.send(presentation)
-    }
-
-    /// A coarse fingerprint of what the island shows: car identities and
-    /// their 5 m distance bucket, plus severity. Changes when a car
-    /// appears, drops, escalates, or moves a noticeable amount.
-    private func islandSignature(_ p: RadarPresentation) -> String {
-        if p.isClear { return "clear" }
-        let cars = p.cars.map { "\($0.id):\($0.distanceMeters / 5)" }.joined(separator: ",")
-        return "\(p.highestLevelRaw)|\(cars)"
     }
 }
