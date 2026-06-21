@@ -17,3 +17,7 @@ DerivedData/
 App/VarioRadar.xcodeproj/
 App/Sources/Info.plist
 App/Widgets/Sources/Info.plist
+
+# Ad-hoc design explainers (kept local, not published)
+docs/dynamic-island-capabilities.html
+docs/dynamic-island-radar-guide.md
