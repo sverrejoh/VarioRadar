@@ -128,22 +128,21 @@ final class RadarSessionStore: ObservableObject {
             contactArmed = false
         }
 
-        // Throttle Live Activity updates. Flooding ActivityKit at the
-        // radar's ~8 Hz makes the system coalesce and lag everything.
-        // Important signals (a car appears/drops, severity changes) must
-        // always pass immediately; only pure movement is rate-limited, and
-        // the view interpolates motion between snapshots on-device.
-        // Demo (a steady 1 Hz) renders smoothly in the background, so 1 Hz
-        // sits within the system budget. Match it: pure movement rides a
-        // 1 Hz cadence (motion is interpolated on-device between snapshots),
-        // important changes (car appears/drops, severity) get a faster 0.5 s
-        // floor, and an alert always passes immediately. Sending more than
-        // this overruns the background budget and makes live LAG behind demo.
+        // Live Activity update budget management. Ride logs show that
+        // sending a steady ~1 Hz for many minutes exhausts the background
+        // update budget, after which iOS drops most island renders
+        // ("random / nothing happens"). So spend the budget on the events
+        // the rider watches for: a car appearing/dropping or a severity
+        // change updates immediately (>= 0.3 s apart to absorb flicker);
+        // pure movement only refreshes every ~4 s (still under the 5 s
+        // stale window), with on-device interpolation carrying the motion
+        // in between. This keeps our footprint low so arrivals/departures
+        // actually render in the background.
         let importantSig = presentation.isClear
             ? "clear" : "\(presentation.threatCount)|\(presentation.highestLevelRaw)"
         let elapsed = now.timeIntervalSince(lastIslandUpdate)
         let importantChanged = importantSig != lastImportantSignature
-        if rising || elapsed >= 1.0 || (importantChanged && elapsed >= 0.5) {
+        if rising || (importantChanged && elapsed >= 0.3) || elapsed >= 4.0 {
             lastIslandUpdate = now
             lastImportantSignature = importantSig
             let appActive = UIApplication.shared.applicationState == .active
